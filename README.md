@@ -20,6 +20,13 @@ carry over to a real soft sensor:
 This project measures how much each of these inflates the scores, and what is
 left under evaluation protocols that respect time.
 
+The plant is a reverse cationic flotation circuit: amine (`Amina Flow`)
+collects quartz into the froth, starch depresses the iron oxides, and the
+iron concentrate leaves with the column underflow. `% Iron Concentrate` and
+`% Silica Concentrate` are two assays of that final concentrate. They are not
+a closed pair (other gangue minerals remain), so their correlation is −0.80
+rather than −1.
+
 ## Results
 
 Full run on the OpenML file (737,453 rows), default settings, seed 0.
@@ -35,7 +42,7 @@ single split):
 | B1. Time-ordered, with iron | -0.00 | 0.54 | 0.61 | 0.61 | 0.60 |
 | C. Walk-forward CV | -0.24 ± 0.34 | **0.45 ± 0.09** | -0.17 ± 0.12 | -0.30 ± 0.56 | -0.35 ± 0.46 |
 | C1. Walk-forward, no feed assays | -0.24 ± 0.34 | **0.45 ± 0.09** | -0.15 ± 0.14 | -0.24 ± 0.53 | -0.30 ± 0.56 |
-| D. One-hour-ahead forecast | -0.25 ± 0.36 | 0.45 ± 0.09 | **0.47 ± 0.10** | 0.40 ± 0.14 | 0.37 ± 0.15 |
+| D. One-hour-ahead forecast | -0.25 ± 0.36 | 0.45 ± 0.09 | 0.47 ± 0.10 | 0.40 ± 0.14 | 0.37 ± 0.15 |
 
 MAE in % SiO₂ (mean across folds):
 
@@ -50,33 +57,47 @@ MAE in % SiO₂ (mean across folds):
 | C1. Walk-forward, no feed assays | 0.983 | **0.494** | 0.905 | 0.967 | 0.966 |
 | D. One-hour-ahead forecast | 0.983 | **0.494** | 0.573 | 0.652 | 0.637 |
 
+MAE is the headline metric: it is less sensitive to the few large assay
+jumps than RMSE and R². In walk-forward CV each fold is refitted on all past
+hours and then scores a block of about 680 hours without refitting inside the
+block. Fold-level R² varies a lot (random forest: −0.15, −1.29, −0.21, 0.00,
+0.12; the worst fold is 2017-05-19 to 2017-06-16), so the means above hide a
+wide spread; `results/scores.csv` and the report list every fold.
+
 What this shows, on this dataset and with these models:
 
 - **The naive setup is badly inflated.** Random forest reaches R² 0.98 under
-  A, in line with the 0.9 to 0.98 range reported in papers that use random
-  splits (see Related work). Under walk-forward CV (C) the same model has
-  R² −0.30 and its MAE grows from 0.108 to 1.001.
-- **Most of the inflation comes from the repeated 20 s rows, not only from
-  the iron column.** Dropping iron (A → A1) lowers random forest R² from 0.98
-  to 0.81. Collapsing to hourly means (A1 → A2) lowers it to 0.34. Respecting
-  time order (A2 → B, C) takes it to about zero or below.
-- **The iron column is worth about R² 0.6 even under a time-ordered split**
-  (B1 vs B). It is a lab result of the same sample as the target, so this is
-  a measure of the leak, not of a useful sensor.
+  A, close to the R² 0.983 that Loseto et al. (2022) report with randomly
+  sampled 20 s rows (see Related work). Under walk-forward CV (C) the same
+  model has R² −0.30 and its MAE grows from 0.108 to 1.001.
+- **The iron column is only part of the inflation.** Dropping iron (A → A1)
+  lowers random forest R² from 0.98 to 0.81. Collapsing to hourly means
+  (A1 → A2) lowers it to 0.34, and respecting time order (A2 → B, C) takes it
+  to about zero or below. The A1 → A2 step mixes two things: it removes the
+  duplicated labels, but it also averages away the 20 s detail and shrinks
+  the sample. A time-ordered protocol with richer within-hour features is
+  planned to separate them.
+- **With the iron column, a time-ordered split gives R² about 0.6** (B1 vs
+  B), roughly the 0.64 one would expect from the −0.80 correlation alone. It
+  is a co-assay of the same sample as the target, so this measures the leak,
+  not a useful sensor. Even so, B1 models lose to persistence in MAE
+  (0.562 vs 0.503).
 - **Process data alone do not beat the last lab value.** Under B, C and C1,
   persistence (the previous hour's assay) has MAE about 0.49 to 0.50, while
   every learned model is above 0.9, close to the training mean. Walk-forward
   R² of the learned models is negative in most folds.
 - **With the recent assays as inputs (D), models roughly tie persistence.**
-  Ridge has slightly lower RMSE (0.769 vs 0.781) and R² (0.47 vs 0.45) but
-  higher MAE (0.573 vs 0.494). Permutation importance puts almost all of its
-  skill on the two lagged assays.
+  Ridge has slightly lower RMSE (0.769 vs 0.781) and higher R² (0.47 vs
+  0.45), within the fold spread, but higher MAE in every fold (mean 0.573 vs
+  0.494). Permutation importance puts almost all of its skill on the two
+  lagged assays.
 - Removing the feed assays (C1) changes little; they are not what holds the
   honest models back.
-- Repeated and interpolated hours do not explain the persistence result.
-  Scoring only the 2,799 walk-forward test hours with a fresh, non-interpolated
-  assay gives MAE 0.551 for persistence against 0.862 for ridge and 0.958 for
-  LightGBM (0.586 for ridge under D).
+- **Repeated and interpolated hours flatter persistence, but do not explain
+  the result.** The 446 hours that repeat the previous value give persistence
+  zero error. Rescoring (without refitting) only the 2,799 walk-forward test
+  hours with a fresh, non-interpolated assay gives MAE 0.551 for persistence
+  against 0.862 for ridge and 0.958 for LightGBM (0.586 for ridge under D).
 
 So the hypothesis holds here: scores reported under random splits of the
 20 s rows, especially with the iron column, say little about how a soft
@@ -219,8 +240,8 @@ could not access the full text.
 |---|---|---|---|---|---|
 | Doğan, Birant, Kut (2019). Multi-target regression for quality prediction in a mining process. UBMK 2019. [doi:10.1109/UBMK.2019.8907120](https://doi.org/10.1109/UBMK.2019.8907120) | not checked | not checked | not checked | not checked | metadata only |
 | Loseto et al. (2022). Osmotic cloud-edge intelligence for IoT-based cyber-physical systems. *Sensors* 22(6), 2166. [doi:10.3390/s22062166](https://doi.org/10.3390/s22062166) | samples extracted randomly; 1/7 held out for validation | not stated | 20 s rows (737,454 samples) | R² 0.983, MSE 0.021 | full text |
-| Ahmed, Pourrahimian (2024). Quality prediction in process of flotation plant with gradient boosting and LSTM model. MOL Report, University of Alberta. [PDF](https://sites.ualberta.ca/MOL/DataFiles/2024_Papers/501_Ahmed.pdf) | 70 % train, 30 % split into test and validation; ordering not stated | no: iron is a second output for XGBoost, and dropped for the LSTM | 2-minute medians | XGBoost test R² 0.91; LSTM test R² 0.57 | full text |
-| Dong, Gong, He (2026). A new multilayer tree structure belief rule base-based prediction method for key indicators of flotation process. *PLOS ONE* 21(2). [doi:10.1371/journal.pone.0336336](https://doi.org/10.1371/journal.pone.0336336) | chronological (first 70 % train, last 30 % test) | not stated; inputs listed include feed iron and silica | hourly | not checked | full text |
+| Ahmed, Pourrahimian (2024). Quality prediction in process of flotation plant with gradient boosting and LSTM model. MOL Report, University of Alberta. [PDF](https://sites.ualberta.ca/MOL/DataFiles/2024_Papers/501_Ahmed.pdf) | 70 % train, 30 % split into test and validation; ordering not stated | no: iron is a second output for XGBoost, and dropped for the LSTM | 2-minute intervals (medians of 6 rows for the LSTM) | XGBoost test R² 0.91; LSTM test R² 0.57 | full text |
+| Dong, Gong, He (2026). A new multilayer tree structure belief rule base-based prediction method for key indicators of flotation process. *PLOS ONE* 21(2). [doi:10.1371/journal.pone.0336336](https://doi.org/10.1371/journal.pone.0336336) | chronological (first 70 % train, last 30 % test); the text also describes training on March and testing on April hourly data | yes (listed as input X9) | hourly | not checked | full text; the target is described as both tailings silica and concentrate silica |
 | Ortega-Moody et al. (2026). An LSTM approach for quality prediction in a mining process using ensemble data interpolation. *Applied Sciences* 16(7), 3419. [doi:10.3390/app16073419](https://doi.org/10.3390/app16073419) | not checked | not checked | abstract: minute-by-minute prediction and forecasts hours ahead | not checked | abstract only |
 
 The scores above come from different splits, preprocessing and test sets, so
@@ -240,6 +261,10 @@ A here (random forest R² 0.976). Corrections and additions are welcome.
   slower, D is optimistic. The same applies to the feed assays.
 - The target itself was partly interpolated and forward-filled before
   publication; the benchmark cannot recover the original assay times.
+- Air flows and levels are controlled variables (the level set point is the
+  froth/pulp interface). A same-hour fit learns the closed-loop operating
+  policy, which can drift; that is one plausible reason the process-only
+  models fail under C.
 - The 24 h gap in walk-forward CV is a choice, not derived from the process
   dynamics. `--gap-hours` changes it.
 - Fold scores are unweighted means over folds of near-equal size; B and B1

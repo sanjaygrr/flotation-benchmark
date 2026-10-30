@@ -183,6 +183,11 @@ def _persistence_table(summary: pd.DataFrame) -> tuple[str, list[str]]:
         best = learned["mae_mean"].idxmin()
         bm = learned.loc[best, "mae_mean"]
         skill = 1 - bm / pm
+        pr = sub.loc["persistence", "rmse_mean"]
+        best_r = learned["rmse_mean"].idxmin()
+        br = learned.loc[best_r, "rmse_mean"]
+        rmse_note = (f" In RMSE the best model ({MODEL_LABEL[best_r]}) scores {br:.3f} against "
+                     f"{pr:.3f} for persistence.")
         rows.append(
             f"<tr><td>{_esc(p.title)}</td><td>{MODEL_LABEL[best]}</td><td>{bm:.3f}</td>"
             f"<td>{pm:.3f}</td><td style='color:{'#0f766e' if skill > 0 else '#b42318'}'>"
@@ -191,15 +196,15 @@ def _persistence_table(summary: pd.DataFrame) -> tuple[str, list[str]]:
         if p.honest:
             if skill <= 0:
                 notes.append(f"Under <b>{_esc(p.title)}</b> no learned model beats persistence "
-                             f"(best: {MODEL_LABEL[best]}, MAE {bm:.3f} vs {pm:.3f}).")
+                             f"(best: {MODEL_LABEL[best]}, MAE {bm:.3f} vs {pm:.3f})." + rmse_note)
             elif skill < 0.10:
                 notes.append(f"Under <b>{_esc(p.title)}</b> the best model ({MODEL_LABEL[best]}) "
                              f"beats persistence by only {skill * 100:.1f} % in MAE "
-                             f"({bm:.3f} vs {pm:.3f}).")
+                             f"({bm:.3f} vs {pm:.3f})." + rmse_note)
             else:
                 notes.append(f"Under <b>{_esc(p.title)}</b> the best model ({MODEL_LABEL[best]}) "
                              f"beats persistence by {skill * 100:.1f} % in MAE "
-                             f"({bm:.3f} vs {pm:.3f}).")
+                             f"({bm:.3f} vs {pm:.3f})." + rmse_note)
     table = ("<div class='scroll'><table><thead><tr><th>Protocol</th><th>Best learned model</th>"
              "<th>MAE model</th><th>MAE persistence</th><th>MAE skill vs persistence</th></tr></thead>"
              f"<tbody>{''.join(rows)}</tbody></table></div>"
@@ -238,6 +243,25 @@ def _sensitivity_table(pred: pd.DataFrame) -> str:
             "repeated value gives it zero error. Models are not refitted; only the scored hours change.</p>")
 
 
+def _fold_table(scores: pd.DataFrame, key: str) -> str:
+    sub = scores[scores.protocol == key]
+    if sub.empty:
+        return ""
+    folds = sorted(sub.fold.unique())
+    models = [m for m in ALL_MODELS if m in set(sub.model)]
+    head = "".join(f"<th>{MODEL_LABEL[m]}</th>" for m in models)
+    rows = []
+    for f in folds:
+        fs = sub[sub.fold == f].set_index("model")
+        first = fs.iloc[0]
+        cells = "".join(f"<td>{fs.loc[m, 'r2']:+.2f} <span class='muted'>/ {fs.loc[m, 'mae']:.3f}</span></td>"
+                        for m in models)
+        rows.append(f"<tr><td>{f}</td><td>{_esc(first.test_start[:10])} &rarr; {_esc(first.test_end[:10])} "
+                    f"<span class='muted'>({first.n_train} train h)</span></td>{cells}</tr>")
+    return (f"<h3>{_esc(PROTOCOL_BY_KEY[key].title)}</h3><div class='scroll'><table><thead><tr><th>Fold</th>"
+            f"<th>Test period</th>{head}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>")
+
+
 def _importance_chart(imp: pd.DataFrame, protocol: str, model: str, top: int = 12) -> str:
     sub = imp[(imp.protocol == protocol) & (imp.model == model)]
     if sub.empty:
@@ -247,7 +271,7 @@ def _importance_chart(imp: pd.DataFrame, protocol: str, model: str, top: int = 1
     W, left, right, bh = 760, 270, 70, 20
     H = 20 + bh * len(agg) + 10
     vmax = max(float((agg["mean"] + agg["std"].fillna(0)).max()), 1e-6)
-    vmin = min(0.0, float(agg["mean"].min()))
+    vmin = min(0.0, float((agg["mean"] - agg["std"].fillna(0)).min()))
     x = lambda v: left + (v - vmin) / (vmax - vmin) * (W - left - right)
     parts = [f"<svg viewBox='0 0 {W} {H}' width='100%' role='img' "
              f"aria-label='Permutation importance, {protocol}, {model}'>"]
@@ -372,6 +396,7 @@ def _headline(summary: pd.DataFrame) -> str:
 def build_report(results_dir: Path, out: Path | None = None) -> Path:
     results_dir = Path(results_dir)
     summary = pd.read_csv(results_dir / "summary.csv")
+    scores = pd.read_csv(results_dir / "scores.csv")
     meta = json.loads((results_dir / "meta.json").read_text())
     imp_path = results_dir / "importances.csv"
     pred_path = results_dir / "predictions.csv"
@@ -430,6 +455,13 @@ leakage-aware protocols. flotation-benchmark {_esc(meta['version'])}, run finish
 collapse the repeated 20 s rows to hourly means (A2), keep time order (B), then walk forward with a
 {cfg['gap_hours']} h gap (C).</p>
 {_drop_table(summary)}
+</section>
+
+<section><h2>Walk-forward folds</h2>
+<p class="muted">R&sup2; / MAE per fold. Each fold is refitted on all hours that end at least the gap before
+its test block.</p>
+{_fold_table(scores, "walk_forward")}
+{_fold_table(scores, "forecast")}
 </section>
 
 <section><h2>Comparison with persistence</h2>
