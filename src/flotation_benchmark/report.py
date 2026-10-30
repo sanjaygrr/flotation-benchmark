@@ -100,7 +100,8 @@ def _score_table(summary: pd.DataFrame) -> str:
         "<div class='scroll'><table><thead><tr><th>Protocol</th><th>Model</th>"
         "<th>MAE (% SiO&#8322;)</th><th>RMSE</th><th>R&sup2;</th><th>Folds</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></div>"
-        "<p class='muted'>Mean &plusmn; standard deviation across folds. "
+        "<p class='muted'>Unweighted mean &plusmn; standard deviation of the per-fold scores "
+        "(test folds are of near-equal size). "
         "Bold: lowest MAE within the protocol.</p>"
     )
 

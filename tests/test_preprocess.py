@@ -60,7 +60,15 @@ def test_data_summary(sample_csv, hourly):
 def test_persistence_uses_previous_hour_only(hourly):
     h = add_persistence(hourly)
     assert np.isnan(h.loc[0, "prev_target"])
-    assert (h["prev_target"].iloc[1:].to_numpy() == h[TARGET].iloc[:-1].to_numpy()).all()
+    assert (h["prev_target"].iloc[1:].to_numpy() == h["assay_causal"].iloc[:-1].to_numpy()).all()
+
+
+def test_causal_assay_never_uses_interpolated_values(hourly):
+    h = add_persistence(hourly).set_index("date")
+    # 09:00 is a ramp towards the next assay; the causal series keeps the 08:00 value
+    assert h.loc["2017-03-10 09:00", "assay_causal"] == pytest.approx(2.0)
+    assert h.loc["2017-03-10 10:00", "prev_target"] == pytest.approx(2.0)
+    assert h.loc["2017-03-10 10:00", "assay_causal"] == pytest.approx(1.8)
 
 
 def test_forecast_table_uses_only_past(raw_synth):
@@ -71,8 +79,8 @@ def test_forecast_table_uses_only_past(raw_synth):
     for _, r in tab.sample(20, random_state=0).iterrows():
         t = r["date"]
         assert r["target_next"] == pytest.approx(h.loc[t, TARGET])
-        assert r["silica_lag0"] == pytest.approx(h.loc[t - pd.Timedelta("1h"), TARGET])
-        assert r["silica_lag1"] == pytest.approx(h.loc[t - pd.Timedelta("2h"), TARGET])
+        assert r["silica_lag0"] == pytest.approx(h.loc[t - pd.Timedelta("1h"), "assay_causal"])
+        assert r["silica_lag1"] == pytest.approx(h.loc[t - pd.Timedelta("2h"), "assay_causal"])
         c = PROCESS_COLUMNS[3]
         assert r[f"{c}_lag0"] == pytest.approx(h.loc[t - pd.Timedelta("1h"), c])
         assert r[f"{c}_lag1"] == pytest.approx(h.loc[t - pd.Timedelta("2h"), c])

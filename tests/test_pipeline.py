@@ -25,6 +25,8 @@ def test_iron_column_only_in_leaky_protocols(raw_synth):
         if p.honest:
             assert IRON_CONC not in cols
             assert "silica_concentrate" not in cols
+        if not p.use_feed:
+            assert "iron_feed" not in cols and "silica_feed" not in cols
 
 
 def test_forecast_features_exclude_target_hour(raw_synth):

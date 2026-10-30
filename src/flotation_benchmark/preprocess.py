@@ -21,6 +21,9 @@ def aggregate_hourly(raw: pd.DataFrame) -> pd.DataFrame:
       n_samples            number of 20 s rows in the hour
       target_interpolated  True if the target varies inside the hour
       target_repeated      True if the target equals the previous hour's value
+      assay_causal         the target with interpolated hours replaced by the
+                           last real value before them; safe to use as an input
+                           because it never depends on a later assay
     """
     g = raw.groupby(TIME, sort=True)
     hourly = g[COLUMNS].mean()
@@ -28,6 +31,7 @@ def aggregate_hourly(raw: pd.DataFrame) -> pd.DataFrame:
     hourly["target_interpolated"] = g[TARGET].nunique() > 1
     prev = hourly[TARGET].shift(1)
     hourly["target_repeated"] = (hourly[TARGET] == prev) & ~hourly["target_interpolated"]
+    hourly["assay_causal"] = hourly[TARGET].mask(hourly["target_interpolated"]).ffill()
     return hourly.reset_index()
 
 
@@ -79,11 +83,13 @@ def add_persistence(hourly: pd.DataFrame) -> pd.DataFrame:
     """Add ``prev_target``: the last lab value from an earlier hour.
 
     This is what an operator already knows before the current assay comes
-    back, so it is the natural naive predictor. If the previous available
-    hour is across a gap it is still used (last known value).
+    back, so it is the natural naive predictor. It is taken from
+    ``assay_causal``, so an interpolated hour (whose value depends on the next
+    assay) is never used. If the previous available hour is across a gap it is
+    still used (last known value).
     """
     out = hourly.copy()
-    out["prev_target"] = out[TARGET].shift(1)
+    out["prev_target"] = out["assay_causal"].shift(1)
     return out
 
 
@@ -92,7 +98,8 @@ def make_forecast_table(hourly: pd.DataFrame, lags: int = 2) -> pd.DataFrame:
 
     For each hour t with a recorded hour t+1, the inputs are the process
     means of hours t, t-1, ..., t-lags+1 and the lab silica of hours t and
-    t-1. The output is the silica assay of hour t+1. Rows whose lags or
+    t-1 (from ``assay_causal``, so no interpolated value that depends on a
+    later assay is used). The output is the silica value of hour t+1. Rows whose lags or
     target cross a gap in the data are dropped, so every input is from the
     past of the target hour. ``date`` is the target hour.
     """
@@ -102,8 +109,8 @@ def make_forecast_table(hourly: pd.DataFrame, lags: int = 2) -> pd.DataFrame:
         shifted = h[PROCESS_COLUMNS].shift(k)
         for c in PROCESS_COLUMNS:
             feats[f"{c}_lag{k}"] = shifted[c]
-    feats["silica_lag0"] = h[TARGET]
-    feats["silica_lag1"] = h[TARGET].shift(1)
+    feats["silica_lag0"] = h["assay_causal"]
+    feats["silica_lag1"] = h["assay_causal"].shift(1)
     X = pd.DataFrame(feats, index=h.index)
     y = h[TARGET].shift(-1).rename("target_next")
     table = pd.concat([X, y], axis=1).dropna()

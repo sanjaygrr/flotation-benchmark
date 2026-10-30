@@ -25,6 +25,8 @@ from .preprocess import (
 )
 from .splits import random_kfold, time_holdout, walk_forward
 
+FEED_COLUMNS = ("iron_feed", "silica_feed")
+
 
 @dataclass(frozen=True)
 class Protocol:
@@ -35,6 +37,7 @@ class Protocol:
     use_iron: bool
     honest: bool
     description: str
+    use_feed: bool = True
 
 
 PROTOCOLS = [
@@ -65,6 +68,11 @@ PROTOCOLS = [
         "walk_forward", "C. Walk-forward CV", "hourly", "walk_forward", False, True,
         "Hourly means, expanding-window CV over 5 consecutive test blocks with a gap "
         "between train and test, no iron.",
+    ),
+    Protocol(
+        "walk_forward_no_feed", "C1. Walk-forward, no feed assays", "hourly", "walk_forward", False, True,
+        "As C, but also without % Iron Feed and % Silica Feed. Those are lab assays too and their "
+        "reporting time is not recorded.", use_feed=False,
     ),
     Protocol(
         "forecast", "D. One-hour-ahead forecast", "forecast", "walk_forward", False, True,
@@ -100,9 +108,11 @@ def build_tables(raw: pd.DataFrame, rows_stride: int = 1) -> dict[str, pd.DataFr
 
 def feature_columns(protocol: Protocol, table: pd.DataFrame) -> list[str]:
     if protocol.table == "forecast":
-        skip = {TIME, TARGET, "prev_target", "target_interpolated", "target_repeated"}
+        skip = {TIME, TARGET, "prev_target", "target_interpolated", "target_repeated", "assay_causal"}
         return [c for c in table.columns if c not in skip]
     cols = list(PROCESS_COLUMNS)
+    if not protocol.use_feed:
+        cols = [c for c in cols if c not in FEED_COLUMNS]
     if protocol.use_iron:
         cols.append(IRON_CONC)
     return cols
