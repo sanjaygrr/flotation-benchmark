@@ -238,16 +238,66 @@ could not access the full text.
 
 | Paper | Split | `% Iron Concentrate` as input | Time resolution | Reported silica score | What we read |
 |---|---|---|---|---|---|
-| Doğan, Birant, Kut (2019). Multi-target regression for quality prediction in a mining process. UBMK 2019. [doi:10.1109/UBMK.2019.8907120](https://doi.org/10.1109/UBMK.2019.8907120) | not checked | not checked | not checked | not checked | metadata only |
+| Doğan, Birant, Kut (2019). Multi-target regression for quality prediction in a mining process. UBMK 2019. [doi:10.1109/UBMK.2019.8907120](https://doi.org/10.1109/UBMK.2019.8907120) | not stated in abstract | no: iron and silica are predicted jointly as targets | not stated in abstract | R² used; no silica value in the abstract | abstract only |
 | Loseto et al. (2022). Osmotic cloud-edge intelligence for IoT-based cyber-physical systems. *Sensors* 22(6), 2166. [doi:10.3390/s22062166](https://doi.org/10.3390/s22062166) | samples extracted randomly; 1/7 held out for validation | not stated | 20 s rows (737,454 samples) | R² 0.983, MSE 0.021 | full text |
 | Ahmed, Pourrahimian (2024). Quality prediction in process of flotation plant with gradient boosting and LSTM model. MOL Report, University of Alberta. [PDF](https://sites.ualberta.ca/MOL/DataFiles/2024_Papers/501_Ahmed.pdf) | 70 % train, 30 % split into test and validation; ordering not stated | no: iron is a second output for XGBoost, and dropped for the LSTM | 2-minute intervals (medians of 6 rows for the LSTM) | XGBoost test R² 0.91; LSTM test R² 0.57 | full text |
 | Dong, Gong, He (2026). A new multilayer tree structure belief rule base-based prediction method for key indicators of flotation process. *PLOS ONE* 21(2). [doi:10.1371/journal.pone.0336336](https://doi.org/10.1371/journal.pone.0336336) | chronological (first 70 % train, last 30 % test); the text also describes training on March and testing on April hourly data | yes (listed as input X9) | hourly | not checked | full text; the target is described as both tailings silica and concentrate silica |
-| Ortega-Moody et al. (2026). An LSTM approach for quality prediction in a mining process using ensemble data interpolation. *Applied Sciences* 16(7), 3419. [doi:10.3390/app16073419](https://doi.org/10.3390/app16073419) | not checked | not checked | abstract: minute-by-minute prediction and forecasts hours ahead | not checked | abstract only |
+| Ortega-Moody, Ward, Jenab, Isaza (2026). An LSTM approach for quality prediction in a mining process using ensemble data interpolation. *Applied Sciences* 16(7), 3419. [doi:10.3390/app16073419](https://doi.org/10.3390/app16073419) | 70/10/20 split of 3,948 hourly samples (§3.3); random or chronological not stated | no, removed (§3.2) | hourly for the model; minute-level interpolated estimates | LSTM MAE 0.499, RMSE 0.705, R² 0.631 (Table 6) | full text (open access, CC BY) |
+| Osei (2019). Machine learning-based quality prediction in the froth flotation process of mining. MSc thesis, Dalarna University. [PDF](https://www.diva-portal.org/smash/get/diva2%3A1386720/FULLTEXT01.pdf) | random: 70% train with 10-fold CV, 30% test; "randomly sampled" (§3.1.6) | no: "predict silica concentrate without the use of iron concentrate" (§3.1.1) | 20 s rows | best neural network MAE 0.381, RMSE 0.554 (Table 11) | full text |
+| Basilio, Diniz, Guimarães, Silva (2026). Silica grade forecast in flotation processes: evaluation and statistical diagnosis of machine learning methods. SBSI 2026 (extended). [link](https://sol.sbc.org.br/index.php/sbsi_estendido/article/view/42009) | one-step-ahead (T+1) forecast | not stated in abstract | not stated in abstract | public dataset: random forest R² 0.66, LSTM R² 0.67 | abstract only |
+| Xie, Qiu (2022). Robust monitoring of multivariate processes with short-ranged serial data correlation. *Quality and Reliability Engineering International*. [doi:10.1002/qre.3199](https://doi.org/10.1002/qre.3199) | chronological: first 300 observations as in-control, next 100 monitored (§4) | no (pulp flow, air flow, levels only) | not stated | n/a, process monitoring, not silica prediction | full text |
+| Hofer, Krempl, Lang (2024). Anticipative Bayesian classification for data streams with verification latency. *Journal of Applied Statistics*. [doi:10.1080/02664763.2024.2319222](https://doi.org/10.1080/02664763.2024.2319222) | sequential test-then-train stream | not stated | not stated | n/a, target turned into a classification stream (AUC, F1) | full text |
+| Caers, Eskanlou (2026). Causal analysis of an industrial iron-ore flotation circuit: which setpoint effects can be identified from plant data. *Minerals Engineering*. [doi:10.1016/j.mineng.2026.110922](https://doi.org/10.1016/j.mineng.2026.110922) | n/a, causal analysis on 4,097 hourly records | not checked | hourly | n/a, no predictive score | abstract only |
 
 The scores above come from different splits, preprocessing and test sets, so
 they are not directly comparable with each other or with this benchmark. The
 row-level random-split result of Loseto et al. (R² 0.983) is close to protocol
 A here (random forest R² 0.976). Corrections and additions are welcome.
+
+
+None of the papers above that report a silica score also report a
+persistence baseline. For reference, persistence gets MAE 0.494 to 0.503
+and R² 0.45 to 0.54 under the time-ordered protocols here (B, C, C1, D).
+Osei (2019) drops the iron column but splits the 20 s rows at random.
+Ortega-Moody et al. (2026) use hourly data without the iron column, and
+their LSTM (MAE 0.499, R² 0.631) is in the same range as persistence here;
+they do not state whether the split was chronological. These scores are not
+directly comparable with this benchmark, and no claim is made that they are
+wrong.
+
+## Background
+
+**Process.** The data come from a reverse cationic flotation circuit for
+iron ore in Brazil. Quartz is floated with an amine collector, the iron
+oxides are depressed with starch, and the pulp is alkaline (pH about 9 to
+10.5). The concentrate, which is the product, is the column underflow,
+the sunk stream. `% Silica Concentrate` is the SiO₂ left in
+that product, the impurity the circuit exists to remove
+([Filippov et al., 2014](https://doi.org/10.1016/j.minpro.2014.01.002);
+[Lima et al., 2013](https://doi.org/10.1016/j.mineng.2013.03.001);
+[Araujo et al., 2005](https://doi.org/10.1016/j.mineng.2004.08.023)).
+
+**Why a soft sensor.** Grade comes from laboratory assays that are
+infrequent and delayed, while airflow, levels, reagent dosages and pH are
+logged every few seconds. Data-driven soft sensors try to bridge that gap
+([Kadlec et al., 2009](https://doi.org/10.1016/j.compchemeng.2008.12.012);
+[Jovanović et al., 2015](https://doi.org/10.1016/j.mineng.2015.09.020);
+[McCoy and Auret, 2019](https://doi.org/10.1016/j.mineng.2018.12.004);
+[Aldrich et al., 2010](https://doi.org/10.1016/j.minpro.2010.04.005)).
+The dataset records when each assay was sampled, not when its result
+reached the control room. Reported sampling-plus-assay delays for flotation
+labs range from tens of minutes to hours (e.g. 30 to 180 min for a zinc
+circuit, [Zhang et al., 2026](https://doi.org/10.1016/j.mineng.2026.110816)),
+so the forecasting protocol (D) is a best case.
+
+**Why persistence is hard to beat.** Hourly concentrate grade moves slowly,
+so the last assay already carries most of the information about the next
+one. Any soft sensor for this kind of target should be compared against it.
+
+**Other open data.** No open industrial flotation dataset of this kind
+(continuous process signals plus concentrate assays) for copper was found.
+Open flotation data that do exist are mostly froth images, for example
+[Yantén et al., 2023](https://doi.org/10.3390/data8040069).
 
 ## Limitations
 

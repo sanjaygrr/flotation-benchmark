@@ -59,6 +59,10 @@ COLUMNS = [
 LAB_COLUMNS = ["iron_feed", "silica_feed", IRON_CONC, TARGET]
 
 
+class RawDataError(ValueError):
+    """The raw file is missing, corrupt or not in a known format."""
+
+
 def canonical_name(name: str) -> str:
     """Map raw column names (Kaggle CSV or OpenML) to snake_case names."""
     s = name.strip().lower().replace("%", " ")
@@ -134,13 +138,21 @@ def parse_raw(df: pd.DataFrame) -> pd.DataFrame:
 def read_raw(path: Path) -> pd.DataFrame:
     """Read the raw file (OpenML parquet or Kaggle CSV) and parse it."""
     path = Path(path)
-    if path.suffix == ".parquet" or path.suffix == ".pq":
-        df = pd.read_parquet(path)
-    elif path.suffix == ".csv":
-        df = pd.read_csv(path, dtype=str)
-    else:
-        raise ValueError(f"unsupported file type: {path}")
-    return parse_raw(df)
+    try:
+        if path.suffix in (".parquet", ".pq"):
+            df = pd.read_parquet(path)
+        elif path.suffix == ".csv":
+            df = pd.read_csv(path, dtype=str)
+        else:
+            raise RawDataError(f"unsupported file type: {path}")
+    except RawDataError:
+        raise
+    except Exception as exc:
+        raise RawDataError(f"could not read {path}: {exc}") from exc
+    try:
+        return parse_raw(df)
+    except (KeyError, ValueError) as exc:
+        raise RawDataError(f"{path} is not in the expected format: {exc}") from exc
 
 
 def float32_frame(df: pd.DataFrame) -> pd.DataFrame:
